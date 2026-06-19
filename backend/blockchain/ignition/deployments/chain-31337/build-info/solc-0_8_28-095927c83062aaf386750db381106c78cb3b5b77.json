@@ -1,0 +1,42 @@
+{
+  "_format": "hh3-sol-build-info-1",
+  "id": "solc-0_8_28-095927c83062aaf386750db381106c78cb3b5b77",
+  "solcVersion": "0.8.28",
+  "solcLongVersion": "0.8.28+commit.7893614a",
+  "userSourceNameMap": {
+    "contracts/ReaderInteractions.sol": "project/contracts/ReaderInteractions.sol"
+  },
+  "input": {
+    "language": "Solidity",
+    "settings": {
+      "evmVersion": "cancun",
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "outputSelection": {
+        "*": {
+          "": [
+            "ast"
+          ],
+          "*": [
+            "abi",
+            "evm.bytecode",
+            "evm.deployedBytecode",
+            "evm.methodIdentifiers",
+            "metadata"
+          ]
+        }
+      },
+      "remappings": []
+    },
+    "sources": {
+      "project/contracts/OwnableLite.sol": {
+        "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.28;\n\ncontract OwnableLite {\n    address public owner;\n\n    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);\n\n    error NotOwner();\n    error ZeroAddress();\n\n    constructor(address initialOwner) {\n        if (initialOwner == address(0)) revert ZeroAddress();\n        owner = initialOwner;\n        emit OwnershipTransferred(address(0), initialOwner);\n    }\n\n    modifier onlyOwner() {\n        if (msg.sender != owner) revert NotOwner();\n        _;\n    }\n\n    function transferOwnership(address newOwner) external onlyOwner {\n        if (newOwner == address(0)) revert ZeroAddress();\n        address previousOwner = owner;\n        owner = newOwner;\n        emit OwnershipTransferred(previousOwner, newOwner);\n    }\n}\n"
+      },
+      "project/contracts/ReaderInteractions.sol": {
+        "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.28;\n\nimport \"./OwnableLite.sol\";\n\ninterface IPaperRegistryPublicationView {\n    function isPublished(bytes32 paperId) external view returns (bool);\n}\n\ncontract ReaderInteractions is OwnableLite {\n    uint8 public constant DOWNLOAD_LIMIT = 3;\n    uint64 public constant DOWNLOAD_WINDOW = 1 days;\n\n    struct PaperStats {\n        uint64 reads;\n        uint64 downloads;\n        uint32 ratingCount;\n        uint32 ratingTotalHalfSteps;\n    }\n\n    struct DownloadPolicy {\n        bool allowed;\n        uint8 remaining;\n        uint8 recentDownloads;\n        uint64 nextAvailableAt;\n    }\n\n    struct DownloadTracker {\n        uint64[DOWNLOAD_LIMIT] timestamps;\n        uint8 count;\n    }\n\n    IPaperRegistryPublicationView public immutable registry;\n\n    mapping(bytes32 => PaperStats) private stats;\n    mapping(bytes32 => mapping(address => bool)) public bookmarks;\n    mapping(bytes32 => mapping(address => uint8)) public userRatings;\n    mapping(bytes32 => mapping(address => DownloadTracker)) private downloadTrackers;\n\n    event BookmarkUpdated(bytes32 indexed paperId, address indexed reader, bool saved);\n    event ReadRecorded(bytes32 indexed paperId, address indexed reader, uint64 totalReads);\n    event RatingSubmitted(\n        bytes32 indexed paperId,\n        address indexed reader,\n        uint8 halfSteps,\n        uint32 ratingCount,\n        uint32 ratingTotalHalfSteps\n    );\n    event DownloadRegistered(\n        bytes32 indexed paperId,\n        address indexed reader,\n        uint64 totalDownloads,\n        uint8 remaining\n    );\n\n    error PaperNotPublished();\n    error InvalidRating();\n    error DownloadLimitReached(uint64 nextAvailableAt);\n\n    constructor(address initialOwner, address registryAddress) OwnableLite(initialOwner) {\n        registry = IPaperRegistryPublicationView(registryAddress);\n    }\n\n    function setBookmark(bytes32 paperId, bool saved) external {\n        _requirePublished(paperId);\n        bookmarks[paperId][msg.sender] = saved;\n        emit BookmarkUpdated(paperId, msg.sender, saved);\n    }\n\n    function recordRead(bytes32 paperId) external {\n        _requirePublished(paperId);\n        stats[paperId].reads += 1;\n        emit ReadRecorded(paperId, msg.sender, stats[paperId].reads);\n    }\n\n    function submitRating(bytes32 paperId, uint8 halfSteps) external {\n        _requirePublished(paperId);\n        if (halfSteps < 1 || halfSteps > 10) revert InvalidRating();\n\n        PaperStats storage paperStats = stats[paperId];\n        uint8 previousRating = userRatings[paperId][msg.sender];\n\n        if (previousRating == 0) {\n            paperStats.ratingCount += 1;\n            paperStats.ratingTotalHalfSteps += halfSteps;\n        } else {\n            paperStats.ratingTotalHalfSteps =\n                paperStats.ratingTotalHalfSteps -\n                previousRating +\n                halfSteps;\n        }\n\n        userRatings[paperId][msg.sender] = halfSteps;\n\n        emit RatingSubmitted(\n            paperId,\n            msg.sender,\n            halfSteps,\n            paperStats.ratingCount,\n            paperStats.ratingTotalHalfSteps\n        );\n    }\n\n    function registerDownload(bytes32 paperId) external {\n        _requirePublished(paperId);\n\n        DownloadTracker storage tracker = downloadTrackers[paperId][msg.sender];\n        uint64 nextAvailableAt = _compactTracker(tracker);\n        if (tracker.count >= DOWNLOAD_LIMIT) revert DownloadLimitReached(nextAvailableAt);\n\n        tracker.timestamps[tracker.count] = uint64(block.timestamp);\n        tracker.count += 1;\n\n        stats[paperId].downloads += 1;\n\n        emit DownloadRegistered(\n            paperId,\n            msg.sender,\n            stats[paperId].downloads,\n            DOWNLOAD_LIMIT - tracker.count\n        );\n    }\n\n    function getPaperStats(bytes32 paperId) external view returns (PaperStats memory) {\n        return stats[paperId];\n    }\n\n    function getAverageRatingHalfSteps(bytes32 paperId) external view returns (uint256) {\n        PaperStats memory paperStats = stats[paperId];\n        if (paperStats.ratingCount == 0) return 0;\n        return paperStats.ratingTotalHalfSteps / paperStats.ratingCount;\n    }\n\n    function getDownloadPolicy(bytes32 paperId, address reader) external view returns (DownloadPolicy memory) {\n        DownloadTracker memory tracker = downloadTrackers[paperId][reader];\n        (uint8 activeCount, uint64 nextAvailableAt) = _activeDownloadState(tracker);\n\n        return DownloadPolicy({\n            allowed: activeCount < DOWNLOAD_LIMIT,\n            remaining: DOWNLOAD_LIMIT - activeCount,\n            recentDownloads: activeCount,\n            nextAvailableAt: nextAvailableAt\n        });\n    }\n\n    function _requirePublished(bytes32 paperId) internal view {\n        if (!registry.isPublished(paperId)) revert PaperNotPublished();\n    }\n\n    function _compactTracker(DownloadTracker storage tracker) internal returns (uint64 nextAvailableAt) {\n        uint64[DOWNLOAD_LIMIT] memory fresh;\n        uint8 activeCount;\n        uint64 cutoff = uint64(block.timestamp) - DOWNLOAD_WINDOW;\n\n        for (uint8 i = 0; i < tracker.count; i++) {\n            uint64 timestamp = tracker.timestamps[i];\n            if (timestamp > cutoff) {\n                fresh[activeCount] = timestamp;\n                activeCount += 1;\n            }\n        }\n\n        for (uint8 j = 0; j < DOWNLOAD_LIMIT; j++) {\n            tracker.timestamps[j] = fresh[j];\n        }\n        tracker.count = activeCount;\n\n        if (activeCount >= DOWNLOAD_LIMIT) {\n            nextAvailableAt = fresh[0] + DOWNLOAD_WINDOW;\n        }\n    }\n\n    function _activeDownloadState(DownloadTracker memory tracker) internal view returns (uint8 activeCount, uint64 nextAvailableAt) {\n        uint64 cutoff = uint64(block.timestamp) - DOWNLOAD_WINDOW;\n        uint64 earliestActive;\n\n        for (uint8 i = 0; i < tracker.count; i++) {\n            uint64 timestamp = tracker.timestamps[i];\n            if (timestamp > cutoff) {\n                if (activeCount == 0 || timestamp < earliestActive) {\n                    earliestActive = timestamp;\n                }\n                activeCount += 1;\n            }\n        }\n\n        if (activeCount >= DOWNLOAD_LIMIT) {\n            nextAvailableAt = earliestActive + DOWNLOAD_WINDOW;\n        }\n    }\n}\n"
+      }
+    }
+  }
+}

@@ -1,0 +1,119 @@
+================================================================================
+DecentraScholar - Hardhat Test Suite Results
+Date: 2026-04-28
+Working directory: backend/blockchain
+Command: npm.cmd test
+Framework: Hardhat v3, Mocha, Solidity 0.8.28
+================================================================================
+
+FINAL STATUS: PASS
+
+Summary:
+- Solidity compile: 1 Solidity file compiled with solc 0.8.28.
+- Solidity tests: 0 passing, no Solidity tests present.
+- Mocha tests: 64 passing, 0 failing.
+- Runtime: approximately 19 seconds.
+
+Test files executed:
+- backend/blockchain/test/DecentraScholar.ts
+- backend/blockchain/test/DecentraScholarAdversarial.ts
+- backend/blockchain/test/DecentraScholarFull.ts
+
+Observed command note:
+- Running "npm test" directly from PowerShell was blocked by local script
+  execution policy because PowerShell tried to load npm.ps1.
+- The suite was run successfully with "npm.cmd test".
+
+================================================================================
+Coverage Added / Updated
+================================================================================
+
+New file:
+- DecentraScholarAdversarial.ts
+
+Adversarial suite coverage:
+- A: Access control and authorization, 8 tests.
+  Covers unauthorized coordinator-only calls, owner-only calls, and the
+  author-reviewing-own-paper guard.
+
+- B: Assignment guards, 7 tests.
+  Covers assignedReviewers mapping enforcement, unregistered reviewer blocking,
+  self-selected reviewer blocking, accept/decline by non-slot holders, double
+  accept/decline, and tiebreaker assignment state.
+
+- C: Session state-machine guards, 11 tests.
+  Covers double finalization, double blind review submission, double rebuttal
+  submission, joins after finalization or in the wrong phase, ejected reviewer
+  rejoin blocking, full-slot blocking, invalid Pending finalization, zero
+  deadline replacement, and post-finalization mutations.
+
+- D: Paper registry guards, 7 tests.
+  Covers duplicate paper IDs, empty title/category/ID, publishing a non-accepted
+  paper, stranger publishing attempts, non-author acknowledgeDecision, and
+  non-author updateSubmission.
+
+- E: Financial guards, 6 tests.
+  Covers double stake lock, settling unstaked reviewers, zero-amount stake,
+  zero-amount submission fee, insufficient ETH to buy DST, and reward payout
+  exceeding the remaining reward pool.
+
+- F: Reader interaction guards, 5 tests.
+  Covers rating 0 rejection, rating 11 rejection, boundary ratings 1 and 10,
+  download limit enforcement, and independent per-reader download quotas.
+
+- G: Full rejection and abandonment paths, 5 tests.
+  Covers unanimous rejection, 2 reject + 1 accept rejection, abandonment,
+  rebuttal deadlock finalized by tiebreaker, and revision-requested re-entry.
+
+Other updated tests:
+- DecentraScholarFull.ts:
+  T1, T4, and T5 call assignReviewers() after createSession so submitReview
+  satisfies the assignedReviewers mapping guard.
+
+- DecentraScholar.ts:
+  The basic submission/review/publication flow, reader interaction flow, and
+  revision-requested re-entry path now call assignReviewers() after createSession
+  where reviewers submit reviews.
+
+================================================================================
+Fixes Applied Before Final Passing Run
+================================================================================
+
+- Added missing assignReviewers() calls in DecentraScholar.ts for tests that
+  submit reviews after coordinator-created sessions.
+- Updated A7 and A8 in DecentraScholarAdversarial.ts to expect NotOwner for
+  owner-only functions setCoordinator() and setReviewManager().
+- Updated E5 in DecentraScholarAdversarial.ts to expect the InvalidPayment
+  custom error instead of using the deprecated Hardhat .reverted matcher.
+- Updated ReaderInteractions.sol so submitRating accepts the adversarial suite's
+  documented valid half-step rating range of 1 through 10.
+
+================================================================================
+Final Test Output Summary
+================================================================================
+
+DecentraScholar contracts:
+- 7 passing.
+
+DecentraScholar - Adversarial & Edge-Case Test Suite:
+- Group A: 8 passing.
+- Group B: 7 passing.
+- Group C: 11 passing.
+- Group D: 7 passing.
+- Group E: 6 passing.
+- Group F: 5 passing.
+- Group G: 5 passing.
+
+DecentraScholar - 8 Selected Report Tests:
+- T1 Full publish flow: passing.
+- T2 Submission fee split: passing.
+- T3 Reviewer assignment guard: passing.
+- T4 Majority acceptance: passing.
+- T5 Rebuttal deadlock and tiebreaker: passing.
+- T6 No-show slashing: passing.
+- T7 Registry access control: passing.
+- T8 Reader interaction guards: passing.
+
+Overall:
+- 64 passing.
+- 0 failing.

@@ -1,0 +1,13 @@
+{
+  "name": "reader-interactions-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.17.2",
+    "ethers": "^6.16.0"
+  }
+}

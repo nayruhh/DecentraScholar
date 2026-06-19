@@ -1,0 +1,42 @@
+{
+  "_format": "hh3-sol-build-info-1",
+  "id": "solc-0_8_28-51dfc4364e3bd72e5183fcb23ab003b435f75edc",
+  "solcVersion": "0.8.28",
+  "solcLongVersion": "0.8.28+commit.7893614a",
+  "userSourceNameMap": {
+    "contracts/ReviewerReputation.sol": "project/contracts/ReviewerReputation.sol"
+  },
+  "input": {
+    "language": "Solidity",
+    "settings": {
+      "evmVersion": "cancun",
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "outputSelection": {
+        "*": {
+          "": [
+            "ast"
+          ],
+          "*": [
+            "abi",
+            "evm.bytecode",
+            "evm.deployedBytecode",
+            "evm.methodIdentifiers",
+            "metadata"
+          ]
+        }
+      },
+      "remappings": []
+    },
+    "sources": {
+      "project/contracts/OwnableLite.sol": {
+        "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.28;\n\ncontract OwnableLite {\n    address public owner;\n\n    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);\n\n    error NotOwner();\n    error ZeroAddress();\n\n    constructor(address initialOwner) {\n        if (initialOwner == address(0)) revert ZeroAddress();\n        owner = initialOwner;\n        emit OwnershipTransferred(address(0), initialOwner);\n    }\n\n    modifier onlyOwner() {\n        if (msg.sender != owner) revert NotOwner();\n        _;\n    }\n\n    function transferOwnership(address newOwner) external onlyOwner {\n        if (newOwner == address(0)) revert ZeroAddress();\n        address previousOwner = owner;\n        owner = newOwner;\n        emit OwnershipTransferred(previousOwner, newOwner);\n    }\n}\n"
+      },
+      "project/contracts/ReviewerReputation.sol": {
+        "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.28;\n\nimport \"./OwnableLite.sol\";\n\n/// @title ReviewerReputation\n/// @notice Tracks reviewer reputation scores and submission statistics on-chain.\n///         Scores range 0–100, defaulting to 50. Only authorized coordinators\n///         can update scores (called after review settlement).\ncontract ReviewerReputation is OwnableLite {\n    int16 public constant DEFAULT_REP = 50;\n    int16 public constant MAX_REP = 100;\n    int16 public constant MIN_REP = 0;\n\n    struct Reputation {\n        int16  reviewerRep;\n        uint32 total;\n        uint32 onTime;\n        uint32 late;\n        uint32 missed;\n        bool   initialized;\n    }\n\n    mapping(address => bool)       public coordinators;\n    mapping(address => Reputation) private reputations;\n\n    event CoordinatorUpdated(address indexed coordinator, bool allowed);\n    event ReputationUpdated(\n        address indexed reviewer,\n        int16   reviewerRep,\n        uint32  total,\n        uint32  onTime,\n        uint32  late,\n        uint32  missed\n    );\n\n    error Unauthorized();\n\n    constructor(address initialOwner) OwnableLite(initialOwner) {}\n\n    modifier onlyCoordinator() {\n        if (!coordinators[msg.sender] && msg.sender != owner) revert Unauthorized();\n        _;\n    }\n\n    function setCoordinator(address coordinator, bool allowed) external onlyOwner {\n        if (coordinator == address(0)) revert ZeroAddress();\n        coordinators[coordinator] = allowed;\n        emit CoordinatorUpdated(coordinator, allowed);\n    }\n\n    function _getOrInit(address reviewer) internal returns (Reputation storage rep) {\n        rep = reputations[reviewer];\n        if (!rep.initialized) {\n            rep.reviewerRep = DEFAULT_REP;\n            rep.initialized = true;\n        }\n    }\n\n    /// @notice Record an on-time or late review submission. Called after settlement.\n    function recordSubmission(address reviewer, bool onTime) external onlyCoordinator {\n        Reputation storage rep = _getOrInit(reviewer);\n        rep.total += 1;\n        if (onTime) {\n            rep.onTime += 1;\n            int16 next = rep.reviewerRep + 2;\n            rep.reviewerRep = next > MAX_REP ? MAX_REP : next;\n        } else {\n            rep.late += 1;\n            int16 next = rep.reviewerRep - 4;\n            rep.reviewerRep = next < MIN_REP ? MIN_REP : next;\n        }\n        emit ReputationUpdated(reviewer, rep.reviewerRep, rep.total, rep.onTime, rep.late, rep.missed);\n    }\n\n    /// @notice Record a reviewer no-show (missed deadline). Called after settlement.\n    function recordNoShow(address reviewer) external onlyCoordinator {\n        Reputation storage rep = _getOrInit(reviewer);\n        rep.missed += 1;\n        int16 next = rep.reviewerRep - 10;\n        rep.reviewerRep = next < MIN_REP ? MIN_REP : next;\n        emit ReputationUpdated(reviewer, rep.reviewerRep, rep.total, rep.onTime, rep.late, rep.missed);\n    }\n\n    /// @notice Read a reviewer's current reputation.\n    function getReputation(address reviewer)\n        external\n        view\n        returns (\n            int16  reviewerRep,\n            uint32 total,\n            uint32 onTime,\n            uint32 late,\n            uint32 missed\n        )\n    {\n        Reputation storage rep = reputations[reviewer];\n        reviewerRep = rep.initialized ? rep.reviewerRep : DEFAULT_REP;\n        total  = rep.total;\n        onTime = rep.onTime;\n        late   = rep.late;\n        missed = rep.missed;\n    }\n}\n"
+      }
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "_format": "hh3-sol-build-info-1",
+  "id": "solc-0_8_28-917b67ffce64231905fba6cab7fd1ffd1b5e0f59",
+  "solcVersion": "0.8.28",
+  "solcLongVersion": "0.8.28+commit.7893614a",
+  "userSourceNameMap": {
+    "contracts/DSTToken.sol": "project/contracts/DSTToken.sol"
+  },
+  "input": {
+    "language": "Solidity",
+    "settings": {
+      "evmVersion": "cancun",
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "outputSelection": {
+        "*": {
+          "": [
+            "ast"
+          ],
+          "*": [
+            "abi",
+            "evm.bytecode",
+            "evm.deployedBytecode",
+            "evm.methodIdentifiers",
+            "metadata"
+          ]
+        }
+      },
+      "remappings": []
+    },
+    "sources": {
+      "project/contracts/DSTToken.sol": {
+        "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.28;\n\nimport \"./OwnableLite.sol\";\n\ncontract DSTToken is OwnableLite {\n    string public constant name = \"DecentraScholar Token\";\n    string public constant symbol = \"DST\";\n    uint8 public constant decimals = 18;\n\n    uint256 public totalSupply;\n    mapping(address => uint256) public balanceOf;\n    mapping(address => mapping(address => uint256)) public allowance;\n    mapping(address => bool) public minters;\n\n    event Transfer(address indexed from, address indexed to, uint256 amount);\n    event Approval(address indexed owner, address indexed spender, uint256 amount);\n    event MinterUpdated(address indexed account, bool allowed);\n\n    error Unauthorized();\n    error InsufficientBalance();\n    error InsufficientAllowance();\n\n    constructor(address initialOwner) OwnableLite(initialOwner) {}\n\n    modifier onlyMinter() {\n        if (msg.sender != owner && !minters[msg.sender]) revert Unauthorized();\n        _;\n    }\n\n    function setMinter(address account, bool allowed) external onlyOwner {\n        if (account == address(0)) revert ZeroAddress();\n        minters[account] = allowed;\n        emit MinterUpdated(account, allowed);\n    }\n\n    function approve(address spender, uint256 amount) external returns (bool) {\n        if (spender == address(0)) revert ZeroAddress();\n        allowance[msg.sender][spender] = amount;\n        emit Approval(msg.sender, spender, amount);\n        return true;\n    }\n\n    function transfer(address to, uint256 amount) external returns (bool) {\n        _transfer(msg.sender, to, amount);\n        return true;\n    }\n\n    function transferFrom(address from, address to, uint256 amount) external returns (bool) {\n        uint256 allowed = allowance[from][msg.sender];\n        if (allowed < amount) revert InsufficientAllowance();\n        allowance[from][msg.sender] = allowed - amount;\n        emit Approval(from, msg.sender, allowance[from][msg.sender]);\n        _transfer(from, to, amount);\n        return true;\n    }\n\n    function mint(address to, uint256 amount) external onlyMinter {\n        if (to == address(0)) revert ZeroAddress();\n        totalSupply += amount;\n        balanceOf[to] += amount;\n        emit Transfer(address(0), to, amount);\n    }\n\n    function burn(uint256 amount) external {\n        uint256 current = balanceOf[msg.sender];\n        if (current < amount) revert InsufficientBalance();\n        balanceOf[msg.sender] = current - amount;\n        totalSupply -= amount;\n        emit Transfer(msg.sender, address(0), amount);\n    }\n\n    function _transfer(address from, address to, uint256 amount) internal {\n        if (to == address(0)) revert ZeroAddress();\n        uint256 current = balanceOf[from];\n        if (current < amount) revert InsufficientBalance();\n        balanceOf[from] = current - amount;\n        balanceOf[to] += amount;\n        emit Transfer(from, to, amount);\n    }\n}\n"
+      },
+      "project/contracts/OwnableLite.sol": {
+        "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.28;\n\ncontract OwnableLite {\n    address public owner;\n\n    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);\n\n    error NotOwner();\n    error ZeroAddress();\n\n    constructor(address initialOwner) {\n        if (initialOwner == address(0)) revert ZeroAddress();\n        owner = initialOwner;\n        emit OwnershipTransferred(address(0), initialOwner);\n    }\n\n    modifier onlyOwner() {\n        if (msg.sender != owner) revert NotOwner();\n        _;\n    }\n\n    function transferOwnership(address newOwner) external onlyOwner {\n        if (newOwner == address(0)) revert ZeroAddress();\n        address previousOwner = owner;\n        owner = newOwner;\n        emit OwnershipTransferred(previousOwner, newOwner);\n    }\n}\n"
+      }
+    }
+  }
+}
